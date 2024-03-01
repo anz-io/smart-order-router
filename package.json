@@ -27,7 +27,7 @@
     "test": "jest test/unit",
     "integ-test": "TS_NODE=true jest test/integ",
     "dev": "node ./build/main/server/index.js",
-    "serve": "tsc && npm run dev"
+    "serve": "tsc -p tsconfig.server.json && npm run dev"
   },
   "engines": {
     "node": ">=10"

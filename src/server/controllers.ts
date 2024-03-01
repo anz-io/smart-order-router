@@ -1,3 +1,4 @@
+import { BigNumber } from '@ethersproject/bignumber';
 import { JsonRpcProvider } from '@ethersproject/providers';
 import DEFAULT_TOKEN_LIST from '@uniswap/default-token-list';
 import { Protocol } from '@uniswap/router-sdk';
@@ -22,7 +23,7 @@ import {
   nativeOnChain,
   NodeJSCache,
   parseAmount,
-  // routeAmountsToString,
+  routeAmountsToString,
   // RouteWithValidQuote,
   // SimulationStatus,
   SwapRoute,
@@ -32,7 +33,7 @@ import {
   UniswapMulticallProvider,
   V2PoolProvider,
   V3PoolProvider,
-  // V3RouteWithValidQuote,
+  V3RouteWithValidQuote,
   // SwapType,
 } from '../';
 import { LegacyGasPriceProvider } from '../providers/legacy-gas-price-provider';
@@ -214,7 +215,7 @@ export const quoteController = async (req: Request<{}, {}, QuoteReq>, res: Respo
     const distributionPercent = 5;
     const forceCrossProtocol = false;
     const forceMixedRoutes = false;
-    const debugRouting = true;
+    const debugRouting = false;
     const enableFeeOnTransferFeeFetching = false;
 
 
@@ -248,7 +249,7 @@ export const quoteController = async (req: Request<{}, {}, QuoteReq>, res: Respo
           debugRouting,
           enableFeeOnTransferFeeFetching,
         }
-      );
+      ) as SwapRoute;
     } else {
       const amountOut = parseAmount(amountStr, tokenOut);
       swapRoutes = await router.route(
@@ -278,10 +279,58 @@ export const quoteController = async (req: Request<{}, {}, QuoteReq>, res: Respo
           debugRouting,
           enableFeeOnTransferFeeFetching,
         }
-      );
+      ) as SwapRoute;
     }
 
-    res.json(swapRoutes)
+    if (!swapRoutes) {
+      res.send('Could not find route.');
+    }
+
+    console.log(swapRoutes);
+
+    const {
+      estimatedGasUsed,
+      estimatedGasUsedQuoteToken,
+      estimatedGasUsedUSD,
+      gasPriceWei,
+      quote,
+      quoteGasAdjusted,
+      route: routeAmounts,
+      simulationStatus,
+    } = swapRoutes;
+
+    const v3Routes: V3RouteWithValidQuote[] =
+      routeAmounts as V3RouteWithValidQuote[];
+    let total = BigNumber.from(0);
+    for (let i = 0; i < v3Routes.length; i++) {
+      const route = v3Routes[i]!;
+      const tick = BigNumber.from(
+        Math.max(1, _.sum(route.initializedTicksCrossedList))
+      );
+      total = total.add(tick);
+    }
+
+    let data = {
+      bestRoute: routeAmountsToString(routeAmounts),
+      quote: quote.toFixed(Math.min(quote.currency.decimals, 2)),
+      quoteGasAdjusted: quoteGasAdjusted.toFixed(
+        Math.min(quoteGasAdjusted.currency.decimals, 2)
+      ),
+      estimatedGasUsedQuoteToken: estimatedGasUsedQuoteToken.toFixed(
+        Math.min(estimatedGasUsedQuoteToken.currency.decimals, 6)
+      ),
+      estimatedGasUsedUSD: estimatedGasUsedUSD.toFixed(
+        Math.min(estimatedGasUsedUSD.currency.decimals, 6)
+      ),
+      estimatedGasUsed: estimatedGasUsed.toString(),
+      gasPriceWei: gasPriceWei.toString(),
+      simulationStatus: simulationStatus,
+      blockNumber: blockNumber,
+      totalTicks: total.toString()
+    };
+
+    // res.json(swapRoutes)
+    res.json(data)
 
   } catch (error) {
     console.error(error);
